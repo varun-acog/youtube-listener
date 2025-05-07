@@ -1,0 +1,69 @@
+services:
+  app:
+    labels:
+      - "description=Video analysis tool using YouTube API and PostgreSQL"
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - YOUTUBE_API_KEYS=${YOUTUBE_API_KEYS}
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/video_analysis_db
+      - QUERY=${QUERY}
+    env_file:
+      - .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - .:/app
+    networks:
+      - video-analysis-network
+    command: ["tail", "-f", "/dev/null"]  # Keep the container running
+
+  postgres:
+    image: postgres:15
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=video_analysis_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./pg_hba.conf:/etc/postgresql/pg_hba.conf
+    networks:
+      - video-analysis-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    command:
+      - "postgres"
+      - "-c"
+      - "hba_file=/etc/postgresql/pg_hba.conf"
+
+  dashboard:
+    build:
+      context: ./dashboard
+      dockerfile: Dockerfile
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/video_analysis_db
+      - PORT=3000
+    env_file:
+      - .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    networks:
+      - video-analysis-network
+    command: ["npm", "run", "start"]
+
+networks:
+  video-analysis-network:
+    driver: bridge
+
+volumes:
+  postgres-data:
